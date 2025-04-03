@@ -1,0 +1,1325 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bản đồ Số "Tháng Tư Lịch Sử"</title>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+          crossorigin=""/>
+
+    <script src="https://cdn.tailwindcss.com?plugins=forms,typography,aspect-ratio,line-clamp,container-queries"></script>
+
+    <style>
+        /* --- Base Styles & Layout --- */
+        html, body {
+            height: 100%; margin: 0; padding: 0; font-family: 'Inter', sans-serif;
+            overflow: hidden; /* Prevent scrolling on body */
+            display: flex; flex-direction: column; /* Ensure body takes full height */
+            background-color: #f0f0f0; /* Basic background */
+        }
+        #app-container {
+            position: relative; /* For absolute positioning of children */
+            flex-grow: 1; /* Take remaining vertical space */
+            display: flex; /* Needed for map container */
+            overflow: hidden; /* Prevent app container overflow */
+        }
+        #map {
+            height: 100%; width: 100%;
+            z-index: 10; /* Map layer */
+            background-color: #e9e9e9; /* Slightly different bg for map */
+        }
+
+        /* --- Header --- */
+        #header {
+            background-color: #D80027; /* Primary Red */
+            color: white;
+            padding: 0.5rem 1rem; /* Consistent padding */
+            display: flex;
+            align-items: center; /* Vertically center items */
+            justify-content: space-between; /* Title left, Search right */
+            z-index: 1000; /* Above map, below menu/popups */
+            flex-shrink: 0; /* Prevent header shrinking */
+            position: relative; /* For potential absolute elements inside */
+        }
+        #header-left { display: flex; align-items: center; }
+        #header h1 {
+            font-size: 1rem; /* Base size */
+            sm:font-size: 1.1rem; /* Slightly larger on small screens */
+            font-weight: bold;
+            white-space: nowrap; /* Prevent title wrapping */
+            margin: 0; /* Reset default margin */
+        }
+
+        /* --- Menu Button (Top Right of App Container) --- */
+        #menu-button {
+            position: absolute; top: 0.75rem; right: 0.75rem;
+            background-color: rgba(0, 0, 0, 0.3); /* Semi-transparent background */
+            border: none; color: white; padding: 0.3rem; /* Small padding */
+            border-radius: 9999px; /* Circular */
+            cursor: pointer; z-index: 1001; /* Above map, legend */
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+            display: flex; align-items: center; justify-content: center;
+            transition: background-color 0.2s ease;
+        }
+        #menu-button svg { width: 1.4rem; height: 1.4rem; stroke: white; }
+         @media (min-width: 640px) { /* sm breakpoint */
+            #menu-button { top: 1rem; right: 1rem; padding: 0.4rem; }
+            #menu-button svg { width: 1.6rem; height: 1.6rem; }
+        }
+        #menu-button:hover { background-color: rgba(0, 0, 0, 0.5); }
+
+        /* --- Search (Header Right) --- */
+        #search-wrapper { position: relative; /* For suggestions dropdown */ }
+        #search-container {
+            display: flex; align-items: center; background-color: white;
+            border-radius: 9999px; /* Pill shape */
+        }
+        #search-input {
+            border: none !important; outline: none !important; box-shadow: none !important;
+            padding: 0.25rem 0.75rem; /* Input padding */
+            color: #333;
+            font-size: 16px; /* Set font size to 16px to prevent iOS zoom */
+            background: transparent !important;
+            width: 120px; /* Smaller fixed width */
+            sm:width: 150px; /* Slightly larger on small screens */
+            min-width: 0; /* Prevent flex issues */
+            appearance: none; -webkit-appearance: none; -moz-appearance: none;
+            line-height: normal; /* Ensure line height doesn't cause issues */
+        }
+        #search-button {
+            background: none; border: none;
+            padding: 0.25rem 0.5rem 0.25rem 0.25rem; /* Adjust padding */
+            margin-left: 0; /* Remove default margin */
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+        }
+        #search-button svg { width: 1.1rem; height: 1.1rem; stroke: #D80027; }
+        #search-suggestions {
+            position: absolute; top: 100%; /* Below search input */
+            right: 0; /* Align suggestions to the right */
+            width: 100%; /* Make suggestions width match wrapper */
+            background-color: white; border: 1px solid #ddd; border-top: none;
+            border-radius: 0 0 6px 6px; /* Rounded bottom corners */
+            max-height: 200px; overflow-y: auto; z-index: 1100; /* Above header */
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            display: none; /* Hidden by default */
+        }
+        .suggestion-item {
+            padding: 0.5rem 0.75rem; color: #333; font-size: 0.9rem; /* Suggestion item size can be smaller */
+            cursor: pointer; border-bottom: 1px solid #eee;
+            transition: background-color 0.15s ease;
+            white-space: nowrap; /* Prevent wrapping */
+            overflow: hidden; /* Hide overflow */
+            text-overflow: ellipsis; /* Add ellipsis if text is too long */
+        }
+        .suggestion-item:last-child { border-bottom: none; }
+        .suggestion-item:hover { background-color: #f0f0f0; }
+
+        /* --- Bottom Controls (Centered) --- */
+        #bottom-controls-container {
+            position: absolute; bottom: 0.5rem; left: 50%; transform: translateX(-50%);
+            z-index: 1001; /* Above map, legend */
+            display: flex; align-items: center; gap: 0.5rem;
+        }
+        @media (min-width: 640px) { /* sm breakpoint */
+            #bottom-controls-container { bottom: 15px; gap: 15px; }
+        }
+
+        /* --- Logo Button --- */
+        #logo-container { cursor: pointer; }
+        #logo-container img {
+            width: 60px; height: 60px;
+            sm:width: 75px; sm:height: 75px;
+            border-radius: 50%; background-color: rgba(255, 255, 255, 0.9);
+            padding: 3px; sm:padding: 4px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3); display: block;
+            border: 1px solid #ddd;
+            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+            object-fit: cover; /* Ensure logo fits well */
+        }
+        #logo-container:hover img { transform: scale(1.08); box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
+
+        /* --- Control Buttons (Info, Stories) --- */
+        .control-button {
+            background-color: rgba(255, 255, 255, 0.9); border: 1px solid #ddd;
+            border-radius: 50%; /* Circular */
+            width: 40px; height: 40px;
+            sm:width: 50px; sm:height: 50px;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out, background-color 0.2s ease;
+        }
+        .control-button svg {
+            width: 20px; height: 20px;
+            sm:width: 24px; sm:height: 24px;
+            stroke: #D80027; stroke-width: 2;
+        }
+        .control-button:hover {
+            transform: scale(1.1);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+            background-color: white;
+        }
+
+        /* --- Side Menu --- */
+        #side-menu {
+            position: fixed; /* Fixed position */
+            top: 0; right: 0; height: 100%;
+            width: 80vw; /* Responsive width */
+            max-width: 250px; /* Max width on mobile */
+            sm:max-width: 280px; /* Slightly wider on larger screens */
+            background-color: white; box-shadow: -2px 0 5px rgba(0,0,0,0.2);
+            padding: 1rem;
+            overflow-y: auto; /* Scroll if content overflows */
+            z-index: 1200; /* Above everything else */
+            transition: transform 0.3s ease-in-out;
+            transform: translateX(100%); /* Start off-screen */
+        }
+        #side-menu.open { transform: translateX(0); } /* Slide in */
+        #side-menu h2 {
+            font-size: 1.1rem; sm:font-size: 1.2rem; font-weight: 600;
+            color: #D80027; margin-bottom: 1rem; padding-bottom: 0.5rem;
+            border-bottom: 1px solid #eee; /* Separator */
+        }
+        #side-menu ul { list-style: none; padding: 0; margin: 0; }
+        #side-menu li:not(.menu-section-heading) { border-bottom: 1px solid #eee; }
+        #side-menu li:not(.menu-section-heading):last-child { border-bottom: none; }
+        #side-menu li a {
+            display: block; padding: 0.5rem 0.25rem; /* Adjusted padding */
+            color: #333; text-decoration: none;
+            font-size: 0.85rem; sm:font-size: 0.9rem;
+            transition: color 0.2s ease, background-color 0.2s ease;
+        }
+        #side-menu li a:hover { color: #D80027; background-color: #f9f9f9; }
+        .menu-section-heading {
+            font-weight: 600; color: #4a5568; /* Grayish text */
+            margin-top: 0.75rem; margin-bottom: 0.25rem;
+            padding-left: 0.25rem; padding-bottom: 0.2rem;
+            font-size: 0.75rem; sm:font-size: 0.8rem;
+            text-transform: uppercase; letter-spacing: 0.05em; /* Spacing */
+            border-bottom: 1px solid #cbd5e0;
+            list-style: none; /* Ensure no bullet point */
+        }
+        #location-list > .menu-section-heading:first-child { margin-top: 0; }
+        #close-menu-button {
+            position: absolute; top: 0.75rem; right: 1rem;
+            background: none; border: none; cursor: pointer;
+            display: flex; align-items: center; justify-content: center; padding: 0;
+            color: #666; /* Use color for SVG stroke */
+        }
+        #close-menu-button svg { width: 1.5rem; height: 1.5rem; stroke: currentColor; }
+        #close-menu-button:hover { color: #D80027; }
+
+        /* --- Custom Marker Icons --- */
+        .custom-marker {
+            background-size: contain; background-repeat: no-repeat; background-position: center;
+            width: 30px; height: 30px; border-radius: 50%;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3); cursor: pointer;
+            border: 2px solid white;
+        }
+        /* Specific marker types using optimized inline SVGs */
+        .historical-site-marker { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="30" height="30"><circle cx="50" cy="50" r="45" fill="%23D80027"/><polygon points="50,15 61.8,38.2 88.8,38.2 68.5,54.3 76.4,77.6 50,62.4 23.6,77.6 31.5,54.3 11.2,38.2 38.2,38.2" fill="%23FFDA44"/></svg>'); border-color: white; }
+        .museum-marker { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="30" height="30"><circle cx="50" cy="50" r="48" fill="%234285F4" stroke="%23FFFFFF" stroke-width="4"/><path d="M50 25 L 25 45 L 75 45 Z" fill="%23FFFFFF" /><rect x="30" y="45" width="10" height="30" fill="%23FFFFFF" /><rect x="60" y="45" width="10" height="30" fill="%23FFFFFF" /><rect x="20" y="75" width="60" height="10" fill="%23FFFFFF" /></svg>'); border: none; }
+        .memorial-marker { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="30" height="30"><circle cx="50" cy="50" r="48" fill="%23808080" stroke="%23FFFFFF" stroke-width="4" /><polygon points="50,20 60,40 60,75 40,75 40,40" fill="%23FFFFFF"/><rect x="35" y="75" width="30" height="10" fill="%23FFFFFF"/></svg>'); border: none; }
+
+        /* --- Leaflet Popup Styling --- */
+        .leaflet-popup-content-wrapper {
+            border-radius: 8px; background-color: white; padding: 0; overflow: hidden;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.2); /* Softer shadow */
+        }
+        .leaflet-popup-content {
+            margin: 0 !important; font-size: 13px; sm:font-size: 14px; line-height: 1.5;
+            color: #333;
+            max-height: 350px; sm:max-height: 400px; /* Increased max height */
+            overflow-y: auto; /* Enable scroll */
+        }
+        .leaflet-popup-content h3 {
+            margin: 0 0 4px 0; font-size: 14px; sm:font-size: 15px; font-weight: 600;
+            color: #D80027; /* Match header */
+        }
+        .leaflet-popup-content .popup-description { margin: 0; }
+        .leaflet-popup-content .popup-text-content {
+            padding: 0.5rem 0.75rem; /* Consistent padding */
+        }
+        /* Adjust padding if there's an image */
+        .leaflet-popup-content .popup-text-content.with-image { padding-top: 0.5rem; }
+
+        /* --- Popup Slideshow --- */
+        .popup-slideshow-container {
+            position: relative;
+            width: 100%;
+            overflow: hidden;
+            background-color: #333; /* Darker background */
+            height: 0; /* Collapse default height */
+            padding-bottom: 50%; /* 2:1 Aspect ratio (Height is 50% of Width) */
+        }
+        .popup-slides {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        .popup-slide {
+            display: none; /* Hidden by default */
+            width: 100%; height: 100%;
+            object-fit: cover; /* Fill container, crop if needed */
+            cursor: pointer; /* Indicate clickable for fullscreen */
+        }
+        .popup-slide.active { display: block; } /* Show active slide */
+        .popup-image-single { /* Style for single images */
+            display: block; width: 100%; height: 120px; sm:height: 150px;
+            object-fit: cover;
+            background-color: #333; cursor: pointer;
+        }
+        .popup-prev, .popup-next {
+            cursor: pointer; position: absolute; top: 50%; transform: translateY(-50%);
+            width: auto; padding: 6px 10px; sm:padding: 8px 12px;
+            color: white; font-weight: bold; font-size: 16px; sm:font-size: 18px;
+            transition: background-color 0.3s ease;
+            border-radius: 3px; user-select: none;
+            background-color: rgba(0,0,0,0.4); border: none; z-index: 10;
+        }
+        .popup-prev { left: 5px; border-radius: 0 3px 3px 0; }
+        .popup-next { right: 5px; border-radius: 3px 0 0 3px; }
+        .popup-prev:hover, .popup-next:hover { background-color: rgba(0,0,0,0.7); }
+        .popup-dots {
+            text-align: center; padding: 5px 0;
+            position: absolute; bottom: 5px; width: 100%; z-index: 10;
+        }
+        .popup-dot {
+            cursor: pointer; height: 7px; width: 7px; sm:height: 8px; sm:width: 8px;
+            margin: 0 3px; background-color: rgba(255, 255, 255, 0.5);
+            border-radius: 50%; display: inline-block;
+            transition: background-color 0.3s ease;
+        }
+        .popup-dot.active, .popup-dot:hover { background-color: rgba(255, 255, 255, 0.9); }
+
+        /* --- Popup Image Caption --- */
+        .popup-caption {
+            font-size: 0.75rem; /* Smaller font size */
+            color: #555; /* Grayish color */
+            padding: 0.3rem 0.75rem; /* Padding top/bottom and left/right */
+            text-align: center;
+            background-color: #f8f8f8; /* Light background */
+            border-top: 1px solid #eee; /* Separator line */
+            min-height: 1.5em; /* Ensure space even if empty */
+            line-height: 1.3;
+        }
+
+        /* --- Legend --- */
+        #legend {
+            background-color: rgba(0, 0, 0, 0.7); color: white;
+            padding: 0.3rem 0.5rem; border-radius: 6px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2); z-index: 900; /* Below controls */
+            position: absolute;
+            top: 0.5rem; left: 0.5rem; /* Top-left on mobile */
+            bottom: auto; max-width: 130px;
+        }
+        @media (min-width: 640px) { /* sm breakpoint */
+            #legend {
+                padding: 0.75rem; bottom: 1rem; left: 1rem; /* Bottom-left */
+                top: auto; max-width: none;
+            }
+        }
+        #legend h4 {
+            text-transform: uppercase; font-size: 0.65rem; sm:font-size: 0.8rem;
+            font-weight: 600; margin-bottom: 0.2rem; color: #eee;
+            border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 0.15rem;
+        }
+        #legend .legend-item { display: flex; align-items: center; margin-bottom: 0.15rem; }
+        #legend .legend-icon {
+            width: 14px; height: 14px; sm:width: 20px; sm:height: 20px;
+            margin-right: 0.35rem; /* Increased spacing */
+            border-radius: 50%; flex-shrink: 0; /* Prevent icon shrinking */
+        }
+        #legend span { font-size: 0.65rem; sm:font-size: 0.75rem; color: #f0f0f0; line-height: 1.2; }
+        .boundary-legend-line {
+            width: 1rem; height: 0.2rem; background-color: #D80027;
+            border: 1px solid white; display: inline-block; margin-right: 0.35rem;
+            vertical-align: middle; flex-shrink: 0;
+        }
+
+        /* --- Fullscreen Popups (Image & Content) --- */
+        .fullscreen-popup {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background-color: rgba(0, 0, 0, 0.9); /* Slightly darker overlay */
+            display: flex; align-items: center; justify-content: center;
+            z-index: 2000; /* Highest layer */
+            padding: 0; /* Remove padding */
+            opacity: 0; visibility: hidden; /* Start hidden for transition */
+            transition: opacity 0.3s ease, visibility 0.3s ease;
+        }
+        .fullscreen-popup.visible {
+             opacity: 1; visibility: visible;
+        }
+        /* Content popup styling (unchanged) */
+        .fullscreen-popup-content {
+            background-color: white; padding: 1.5rem; sm:padding: 2rem;
+            border-radius: 8px; width: auto;
+            max-width: 95%; sm:max-width: 90%; /* Responsive max width */
+            max-height: 95%; sm:max-height: 90%; /* Responsive max height */
+            overflow-y: auto; /* Scroll long content */
+            position: relative; /* For close button */
+            cursor: default; /* Default cursor for content */
+            color: #333;
+            transform: scale(0.95); /* Start slightly smaller for transition */
+            transition: transform 0.3s ease;
+        }
+        .fullscreen-popup.visible .fullscreen-popup-content {
+             transform: scale(1);
+        }
+        .fullscreen-popup-content h2 {
+            color: #D80027; font-size: 1.2rem; sm:font-size: 1.5rem; font-weight: bold;
+            margin-top: 0; margin-bottom: 1rem; border-bottom: 1px solid #eee; padding-bottom: 0.5rem;
+        }
+        .fullscreen-popup-content h3 { /* For stories */
+            font-size: 1.1rem; sm:font-size: 1.2rem; font-weight: 600; color: #333;
+            margin-top: 1.5rem; margin-bottom: 0.5rem;
+        }
+        .fullscreen-popup-content h3:first-of-type { margin-top: 0; }
+        .fullscreen-popup-content p {
+            margin-bottom: 1rem; line-height: 1.6; font-size: 0.9rem; sm:font-size: 1rem;
+        }
+        .fullscreen-popup-content div > p:last-child { margin-bottom: 0; } /* Remove margin from last p in a div */
+
+        /* Fullscreen Image Specific */
+        #fullscreen-image-container {
+             display: flex;
+             flex-direction: column; /* Stack image and caption vertically */
+             align-items: center;
+             justify-content: center;
+             width: 100%; height: 100%;
+             position: relative; /* Needed for absolute positioning of controls */
+             cursor: default; /* Default cursor over image area */
+             padding: 1rem; /* Add some padding */
+             box-sizing: border-box;
+        }
+        #fullscreen-image {
+            max-width: 90%; /* Limit image size slightly */
+            max-height: 80%; /* Reduce max height to make space for caption/counter */
+            object-fit: contain; /* Keep contain for fullscreen to see whole image */
+            cursor: default; display: block;
+            user-select: none; /* Prevent image selection */
+            -webkit-user-drag: none; /* Prevent dragging */
+            margin-bottom: 0.5rem; /* Space below image */
+        }
+
+        /* Fullscreen Image Caption */
+        #fullscreen-caption {
+            color: #eee;
+            font-size: 0.9rem;
+            sm:font-size: 1rem;
+            text-align: center;
+            padding: 0.25rem 0.5rem;
+            background-color: rgba(0, 0, 0, 0.5);
+            border-radius: 4px;
+            max-width: 80%; /* Limit caption width */
+            /* margin-top: 0.5rem; Removed, handled by flex gap or counter margin */
+            z-index: 2002; /* Above image */
+            line-height: 1.4;
+            order: 1; /* Ensure it appears after the image in flex flow */
+        }
+
+
+        /* Fullscreen Slideshow Controls */
+        #fullscreen-prev, #fullscreen-next {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            background-color: rgba(0, 0, 0, 0.4);
+            color: white;
+            border: none;
+            padding: 1rem; /* Larger padding for easier touch */
+            cursor: pointer;
+            z-index: 2002; /* Above image, below close button */
+            font-size: 2rem; /* Larger icon */
+            line-height: 1;
+            border-radius: 4px;
+            transition: background-color 0.2s ease;
+            display: none; /* Hidden by default, shown by JS */
+        }
+        #fullscreen-prev { left: 1rem; }
+        #fullscreen-next { right: 1rem; }
+        #fullscreen-prev:hover, #fullscreen-next:hover { background-color: rgba(0, 0, 0, 0.7); }
+        #fullscreen-prev:disabled, #fullscreen-next:disabled {
+             opacity: 0.3;
+             cursor: default;
+        }
+
+        /* Fullscreen Image Counter */
+        #fullscreen-counter {
+            /* Removed absolute positioning */
+            /* position: absolute; */
+            /* bottom: 1rem; */
+            /* left: 50%; */
+            /* transform: translateX(-50%); */
+            background-color: rgba(0, 0, 0, 0.6);
+            color: white;
+            padding: 0.25rem 0.75rem;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            z-index: 2002;
+            user-select: none;
+            display: none; /* Hidden by default, shown by JS */
+            margin-top: 0.5rem; /* Space between caption (if visible) and counter */
+            order: 2; /* Ensure it appears after the caption in flex flow */
+            /* Centering is handled by align-items: center on the container */
+        }
+        /* Hide margin-top if caption is hidden or empty */
+        #fullscreen-caption:empty + #fullscreen-counter,
+        #fullscreen-caption[style*="display: none"] + #fullscreen-counter {
+             margin-top: 0;
+         }
+
+
+        /* Close Buttons for Fullscreen Popups */
+        .close-fullscreen-button {
+            position: absolute; top: 10px; right: 15px; /* Adjusted slightly */
+            color: #aaa; font-size: 24px; sm:font-size: 30px; font-weight: bold;
+            cursor: pointer; user-select: none; line-height: 1; z-index: 2003; /* Highest */
+            transition: color 0.2s ease;
+            background: none; /* Ensure no background */
+            border: none; /* Ensure no border */
+            padding: 0.5rem; /* Add padding for easier clicking */
+        }
+        .close-fullscreen-button:hover { color: #333; }
+        /* Specific style for image overlay close button */
+        #close-fullscreen-image {
+            color: #fff;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.5); /* Add shadow for visibility */
+        }
+        #close-fullscreen-image:hover { color: #ddd; }
+
+        /* --- Custom Alert Box --- */
+        #custom-alert {
+            position: fixed; top: 70px; /* Below header */
+            left: 50%; transform: translateX(-50%);
+            background-color: #fffbeb; /* Light yellow */
+            border: 1px solid #fde68a; /* Yellow border */
+            color: #b45309; /* Dark yellow/brown text */
+            padding: 0.75rem 1rem; border-radius: 6px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            z-index: 2500; /* Very high */
+            display: flex; align-items: center; gap: 0.5rem;
+            max-width: 90%; /* Prevent full width on small screens */
+        }
+        #custom-alert span { flex-grow: 1; font-size: 0.9rem; }
+        #custom-alert button {
+            background: none; border: none; padding: 0.25rem;
+            color: #d97706; /* Amber color */
+            cursor: pointer; line-height: 1;
+        }
+        #custom-alert button:hover { color: #b45309; }
+        #custom-alert button svg { width: 1rem; height: 1rem; stroke-width: 2.5; }
+
+    </style>
+</head>
+<body class="flex flex-col h-screen">
+
+    <header id="header">
+        <div id="header-left">
+            <h1>Bản đồ số Tháng Tư Lịch Sử</h1>
+        </div>
+        <div id="search-wrapper">
+            <div id="search-container">
+                <input type="text" id="search-input" placeholder="Tìm kiếm" aria-label="Tìm kiếm địa điểm">
+                <button id="search-button" aria-label="Thực hiện tìm kiếm">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" x2="16.65" y1="21" y2="16.65"/></svg>
+                </button>
+            </div>
+            <div id="search-suggestions"></div>
+        </div>
+    </header>
+
+    <main id="app-container">
+        <div id="map" aria-label="Bản đồ tương tác các địa điểm lịch sử"></div>
+
+        <button id="menu-button" aria-label="Mở danh sách địa điểm" aria-controls="side-menu" aria-expanded="false">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
+        </button>
+
+        <div id="legend" role="region" aria-label="Chú thích bản đồ">
+            <h4>Chú thích</h4>
+            <div class="legend-item"> <div class="legend-icon custom-marker historical-site-marker" aria-hidden="true"></div> <span>Di tích</span> </div>
+            <div class="legend-item"> <div class="legend-icon custom-marker museum-marker" aria-hidden="true"></div> <span>Bảo tàng</span> </div>
+            <div class="legend-item"> <div class="legend-icon custom-marker memorial-marker" aria-hidden="true"></div> <span>Tưởng niệm</span> </div>
+            <div class="legend-item mt-1"> <span class="boundary-legend-line" aria-hidden="true"></span> <span id="legend-boundary-text">Ranh giới</span> </div>
+        </div>
+
+        <aside id="side-menu" role="navigation" aria-label="Danh sách địa điểm lịch sử">
+            <button id="close-menu-button" aria-label="Đóng danh sách địa điểm">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" x2="6" y1="6" y2="18"/><line x1="6" x2="18" y1="6" y2="18"/></svg>
+            </button>
+            <h2>Địa điểm Lịch sử</h2>
+            <ul id="location-list">
+                <li class="menu-section-heading">Đang tải...</li>
+            </ul>
+        </aside>
+
+        <div id="bottom-controls-container">
+            <button id="stories-button" class="control-button" title="Những câu chuyện lịch sử" aria-label="Mở xem những câu chuyện lịch sử" aria-controls="stories-popup" aria-expanded="false">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+            </button>
+            <div id="logo-container" role="button" tabindex="0" title="Về trung tâm bản đồ" aria-label="Về trung tâm bản đồ">
+                 <img src="img/Logo.png" alt="Logo Câu lạc bộ Lý Luận Trẻ HCMUTE" onerror="this.onerror=null; this.src='https://placehold.co/75x75/EFEFEF/AAAAAA?text=Logo'; this.alt='Lỗi tải logo';">
+            </div>
+            <button id="info-button" class="control-button" title="Thông tin về website" aria-label="Mở xem thông tin về website" aria-controls="info-popup" aria-expanded="false">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="16" y2="12"/><line x1="12" x2="12.01" y1="8" y2="8"/></svg>
+            </button>
+        </div>
+    </main>
+
+    <div id="fullscreen-image-overlay" class="fullscreen-popup" aria-modal="true" role="dialog" aria-label="Xem ảnh phóng to">
+         <div id="fullscreen-image-container">
+              <img id="fullscreen-image" src="" alt="Hình ảnh phóng to">
+              <span id="fullscreen-caption"></span>
+              <span id="fullscreen-counter"></span>
+              <button id="fullscreen-prev" aria-label="Ảnh trước">&#10094;</button>
+              <button id="fullscreen-next" aria-label="Ảnh kế tiếp">&#10095;</button>
+              <button id="close-fullscreen-image" class="close-fullscreen-button" aria-label="Đóng ảnh phóng to">&times;</button>
+        </div>
+    </div>
+
+    <div id="stories-popup" class="fullscreen-popup" aria-modal="true" role="dialog" aria-labelledby="stories-popup-title">
+        <div class="fullscreen-popup-content">
+            <button class="close-fullscreen-button" onclick="closePopup('stories-popup')" aria-label="Đóng cửa sổ câu chuyện">&times;</button>
+            <h2 id="stories-popup-title">Những Câu Chuyện Lịch Sử (30/4)</h2>
+            <div id="stories-content">
+                <p>Đang tải nội dung...</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="info-popup" class="fullscreen-popup" aria-modal="true" role="dialog" aria-labelledby="info-popup-title">
+        <div class="fullscreen-popup-content">
+            <button class="close-fullscreen-button" onclick="closePopup('info-popup')" aria-label="Đóng cửa sổ thông tin">&times;</button>
+            <h2 id="info-popup-title">Thông Tin Website</h2>
+            <p>Đây là trang web bản đồ số "Tháng Tư Lịch Sử", tái hiện các địa điểm lịch sử quan trọng tại TP. Hồ Chí Minh gắn liền với mốc lịch sử Giải phóng miền Nam, thống nhất đất nước.</p>
+            <p>Website được phát triển bởi Câu lạc bộ Lý Luận Trẻ HCMUTE.</p>
+            <p>Phiên bản: 1.0</p> <p>Liên hệ: hoanghuynhh2006@gmail.com - Huỳnh Đức Hoàng - Phó chủ nhiệm Câu lạc bộ</p>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+            crossorigin=""></script>
+
+    <script defer>
+        // --- Constants and Configuration ---
+        const INITIAL_CENTER = [10.7769, 106.6954]; // Ho Chi Minh City center
+        const INITIAL_ZOOM = 13;
+        const MIN_ZOOM = 9;
+        const MAX_ZOOM = 18;
+        const MAP_BOUNDS_SW = [10.0, 106.0]; // Expanded bounds South-West
+        const MAP_BOUNDS_NE = [11.6, 107.4]; // Expanded bounds North-East
+        const FLY_TO_ZOOM = 16; // Zoom level when flying to a marker
+        const POPUP_OPEN_DELAY = 800; // ms delay before opening popup after flyTo
+        const RESIZE_DEBOUNCE_DELAY = 150; // ms delay for map resize invalidation
+        const ALERT_TIMEOUT = 4000; // ms before auto-closing alerts
+
+        // Data file paths
+        const SITES_URL = './historical-sites.json';
+        const GEOJSON_URL = './hcmc-boundary.geojson';
+        const STORIES_URL = './stories.json';
+        const LOGO_PLACEHOLDER_URL = 'https://placehold.co/75x75/EFEFEF/AAAAAA?text=Logo';
+
+        // --- Global State ---
+        let historicalSites = []; // Array to hold site data
+        let map; // Leaflet map instance
+        let markersLayer; // Layer group for markers
+        let resizeTimeoutId; // For debouncing resize events
+        let boundaryLayer; // To store the GeoJSON layer
+        // Fullscreen slideshow state
+        let fullscreenImageObjects = []; // Store objects {url, description}
+        let fullscreenCurrentIndex = 0;
+
+        // --- DOM Element References ---
+        const locationListEl = document.getElementById('location-list');
+        const menuButtonEl = document.getElementById('menu-button');
+        const closeMenuButtonEl = document.getElementById('close-menu-button');
+        const sideMenuEl = document.getElementById('side-menu');
+        const searchInputEl = document.getElementById('search-input');
+        const searchButtonEl = document.getElementById('search-button');
+        const searchSuggestionsEl = document.getElementById('search-suggestions');
+        const appContainerEl = document.getElementById('app-container');
+        const logoContainerEl = document.getElementById('logo-container');
+        const legendBoundaryTextEl = document.getElementById('legend-boundary-text');
+        // Fullscreen Popups & Controls
+        const fullscreenImageOverlayEl = document.getElementById('fullscreen-image-overlay');
+        const fullscreenImageContainerEl = document.getElementById('fullscreen-image-container');
+        const fullscreenImageEl = document.getElementById('fullscreen-image');
+        const fullscreenCaptionEl = document.getElementById('fullscreen-caption');
+        const closeFullscreenImageButtonEl = document.getElementById('close-fullscreen-image');
+        const fullscreenPrevButtonEl = document.getElementById('fullscreen-prev');
+        const fullscreenNextButtonEl = document.getElementById('fullscreen-next');
+        const fullscreenCounterEl = document.getElementById('fullscreen-counter');
+        const storiesPopupEl = document.getElementById('stories-popup');
+        const infoPopupEl = document.getElementById('info-popup');
+        const storiesButtonEl = document.getElementById('stories-button');
+        const infoButtonEl = document.getElementById('info-button');
+        const storiesContentDivEl = document.getElementById('stories-content');
+
+        // --- Leaflet Icon Definitions ---
+        const historicalSiteIcon = L.divIcon({ className: 'custom-marker historical-site-marker', iconSize: [30, 30], iconAnchor: [15, 15], popupAnchor: [0, -15] });
+        const museumIcon = L.divIcon({ className: 'custom-marker museum-marker', iconSize: [30, 30], iconAnchor: [15, 15], popupAnchor: [0, -15] });
+        const memorialIcon = L.divIcon({ className: 'custom-marker memorial-marker', iconSize: [30, 30], iconAnchor: [15, 15], popupAnchor: [0, -15] });
+        const defaultIcon = historicalSiteIcon; // Fallback icon
+
+        // --- Map Initialization ---
+        function initializeMap() {
+            console.log("Initializing map...");
+            const bounds = L.latLngBounds(MAP_BOUNDS_SW, MAP_BOUNDS_NE);
+
+            map = L.map('map', {
+                center: INITIAL_CENTER,
+                zoom: INITIAL_ZOOM,
+                minZoom: MIN_ZOOM,
+                maxZoom: MAX_ZOOM,
+                zoomControl: false, // Use custom position
+                attributionControl: false,
+                maxBounds: bounds,
+                maxBoundsViscosity: 0.9,
+                zoomSnap: 0.25,
+                zoomDelta: 0.5,
+                wheelPxPerZoomLevel: 120
+            });
+
+            L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                maxZoom: MAX_ZOOM,
+            }).addTo(map);
+
+            L.control.zoom({ position: 'bottomright' }).addTo(map);
+            markersLayer = L.layerGroup().addTo(map);
+            console.log("Map initialized.");
+        }
+
+        // --- Data Fetching ---
+        async function fetchData(url) {
+            try {
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status} for ${url}`);
+                }
+                return await response.json();
+            } catch (error) {
+                console.error(`Failed to fetch data from ${url}:`, error);
+                showCustomAlert(`Lỗi tải dữ liệu từ ${url}. Chi tiết: ${error.message}`);
+                return null;
+            }
+        }
+
+        // --- Popup Content Generation ---
+        function generatePopupContent(site) {
+            let imagesContainerHtml = '';
+            let captionHtml = '';
+            const hasImages = site.imageUrls && Array.isArray(site.imageUrls) && site.imageUrls.length > 0;
+            let initialCaption = '';
+
+            if (hasImages) {
+                const imageObjects = site.imageUrls;
+                const placeholder = `this.onerror=null; this.src='https://placehold.co/200x150/CCCCCC/AAAAAA?text=Image+Error'; this.style.objectFit='scale-down';`;
+
+                if (imageObjects.length === 1) {
+                    const imgObj = imageObjects[0];
+                    const description = imgObj.description || '';
+                    const altText = `${site.name} - ${description || 'Ảnh'}`;
+                    imagesContainerHtml = `<img src="${imgObj.url}" alt="${altText}" class="popup-image-single popup-image-fullscreenable" data-index="0" onerror="${placeholder}">`;
+                    initialCaption = description;
+                } else {
+                    let imageSlidesHtml = '';
+                    let dotsHtml = '';
+                    imageObjects.forEach((imgObj, index) => {
+                        const activeClass = index === 0 ? 'active' : '';
+                        const description = imgObj.description || '';
+                        const altText = `${site.name} - ${description || 'Ảnh ' + (index + 1)}`;
+                        imageSlidesHtml += `<img src="${imgObj.url}" alt="${altText}" class="popup-slide popup-image-fullscreenable ${activeClass}" data-index="${index}" onerror="${placeholder}">`;
+                        dotsHtml += `<span class="popup-dot ${activeClass}" data-index="${index}" aria-label="Chuyển đến ảnh ${index + 1}"></span>`;
+                        if (index === 0) {
+                            initialCaption = description;
+                        }
+                    });
+                    imagesContainerHtml = `
+                        <div class="popup-slideshow-container">
+                            <div class="popup-slides">${imageSlidesHtml}</div>
+                            <button class="popup-prev" aria-label="Ảnh trước">&#10094;</button>
+                            <button class="popup-next" aria-label="Ảnh kế tiếp">&#10095;</button>
+                            <div class="popup-dots" role="tablist">${dotsHtml}</div>
+                        </div>
+                    `;
+                }
+                captionHtml = `<div class="popup-caption">${initialCaption}</div>`;
+            }
+
+            const siteDescriptionHtml = (site.description || 'Chưa có mô tả.')
+                                         .replace(/</g, "&lt;")
+                                         .replace(/>/g, "&gt;")
+                                         .replace(/\n/g, '<br>');
+
+            return `
+                <div>
+                    ${imagesContainerHtml}
+                    ${captionHtml}
+                    <div class="popup-text-content ${hasImages ? 'with-image' : ''}">
+                        <h3>${site.name || 'Địa điểm không tên'}</h3>
+                        <div class="popup-description">${siteDescriptionHtml}</div>
+                    </div>
+                </div>
+            `;
+        }
+
+
+        // --- Slideshow Logic (Popup) ---
+        function initializeSlideshow(slideshowContainer, imageObjects) {
+             if (!slideshowContainer || !imageObjects || imageObjects.length <= 1) return;
+
+             const slides = slideshowContainer.querySelectorAll('.popup-slide');
+             const dots = slideshowContainer.querySelectorAll('.popup-dot');
+             const prevButton = slideshowContainer.querySelector('.popup-prev');
+             const nextButton = slideshowContainer.querySelector('.popup-next');
+             const dotsContainer = slideshowContainer.querySelector('.popup-dots');
+             const captionElement = slideshowContainer.closest('.leaflet-popup-content').querySelector('.popup-caption');
+
+             if (slides.length <= 1) {
+                 if (prevButton) prevButton.style.display = 'none';
+                 if (nextButton) nextButton.style.display = 'none';
+                 if (dotsContainer) dotsContainer.style.display = 'none';
+                 return;
+             }
+
+             let currentIndex = Array.from(slides).findIndex(slide => slide.classList.contains('active'));
+             if (currentIndex === -1) currentIndex = 0;
+
+             function showSlide(index) {
+                 if (index < 0 || index >= slides.length) return;
+
+                 slides.forEach((slide, i) => slide.classList.toggle('active', i === index));
+                 dots.forEach((dot, i) => dot.classList.toggle('active', i === index));
+                 currentIndex = index;
+
+                 if (captionElement && imageObjects[currentIndex]) {
+                     captionElement.textContent = imageObjects[currentIndex].description || '';
+                 }
+             }
+
+             prevButton.onclick = () => showSlide((currentIndex - 1 + slides.length) % slides.length);
+             nextButton.onclick = () => showSlide((currentIndex + 1) % slides.length);
+             dots.forEach(dot => {
+                 dot.onclick = (e) => {
+                     const newIndex = parseInt(e.target.dataset.index, 10);
+                     if (!isNaN(newIndex)) showSlide(newIndex);
+                 };
+             });
+
+             showSlide(currentIndex);
+        }
+
+
+        // --- Fullscreen Image Slideshow Logic ---
+
+        // Function to update the fullscreen image, caption, counter, and button states
+        function showFullscreenSlide(index) {
+            if (!fullscreenImageObjects || fullscreenImageObjects.length === 0 || index < 0 || index >= fullscreenImageObjects.length) {
+                console.warn("Invalid index or no fullscreen images:", index, fullscreenImageObjects);
+                return;
+            }
+
+            fullscreenCurrentIndex = index;
+            const currentImageObject = fullscreenImageObjects[fullscreenCurrentIndex];
+            const description = currentImageObject.description || '';
+
+            fullscreenImageEl.src = currentImageObject.url;
+            fullscreenImageEl.alt = description || `Hình ảnh ${fullscreenCurrentIndex + 1} / ${fullscreenImageObjects.length}`;
+
+            if (fullscreenCaptionEl) {
+                fullscreenCaptionEl.textContent = description;
+                fullscreenCaptionEl.style.display = description ? 'block' : 'none';
+            }
+
+            updateFullscreenCounter(); // Call this AFTER caption visibility might change
+
+            fullscreenPrevButtonEl.disabled = fullscreenCurrentIndex === 0;
+            fullscreenNextButtonEl.disabled = fullscreenCurrentIndex === fullscreenImageObjects.length - 1;
+        }
+
+        // Function to update the counter text and position
+        function updateFullscreenCounter() {
+             if (fullscreenImageObjects.length > 1) {
+                 fullscreenCounterEl.textContent = `${fullscreenCurrentIndex + 1} / ${fullscreenImageObjects.length}`;
+                 fullscreenCounterEl.style.display = 'block';
+                 // No longer need to adjust margin-bottom via JS
+             } else {
+                 fullscreenCounterEl.style.display = 'none';
+             }
+        }
+
+
+        // Go to previous fullscreen image
+        function showFullscreenPrev() {
+            if (fullscreenCurrentIndex > 0) {
+                showFullscreenSlide(fullscreenCurrentIndex - 1);
+            }
+        }
+
+        // Go to next fullscreen image
+        function showFullscreenNext() {
+             if (fullscreenCurrentIndex < fullscreenImageObjects.length - 1) {
+                 showFullscreenSlide(fullscreenCurrentIndex + 1);
+             }
+        }
+
+        // Open the fullscreen image viewer
+        function openFullscreenImage(imageObjects, index) {
+            if (!imageObjects || imageObjects.length === 0) return;
+
+            fullscreenImageObjects = imageObjects;
+            fullscreenCurrentIndex = index;
+
+            const showControls = fullscreenImageObjects.length > 1;
+            fullscreenPrevButtonEl.style.display = showControls ? 'block' : 'none';
+            fullscreenNextButtonEl.style.display = showControls ? 'block' : 'none';
+            // Counter visibility handled in showFullscreenSlide/updateFullscreenCounter
+
+            showFullscreenSlide(fullscreenCurrentIndex);
+
+            fullscreenImageOverlayEl.classList.add('visible');
+            fullscreenPrevButtonEl.addEventListener('click', showFullscreenPrev);
+            fullscreenNextButtonEl.addEventListener('click', showFullscreenNext);
+            fullscreenImageOverlayEl.focus();
+        }
+
+        // Close the fullscreen image viewer
+        function closeFullscreenImage() {
+            if (fullscreenImageOverlayEl) {
+                fullscreenImageOverlayEl.classList.remove('visible');
+                fullscreenImageEl.src = '';
+                fullscreenImageEl.alt = '';
+                if (fullscreenCaptionEl) fullscreenCaptionEl.textContent = '';
+                fullscreenImageObjects = [];
+                fullscreenCurrentIndex = 0;
+                fullscreenPrevButtonEl.removeEventListener('click', showFullscreenPrev);
+                fullscreenNextButtonEl.removeEventListener('click', showFullscreenNext);
+            }
+        }
+
+        // --- General Fullscreen Content Popup Logic ---
+        function openPopup(popupId) {
+            const popup = document.getElementById(popupId);
+            const triggerButton = document.querySelector(`[aria-controls="${popupId}"]`);
+            if (popup) {
+                popup.classList.add('visible');
+                if (triggerButton) triggerButton.setAttribute('aria-expanded', 'true');
+                popup.focus();
+            }
+        }
+
+        function closePopup(popupId) {
+            const popup = document.getElementById(popupId);
+            const triggerButton = document.querySelector(`[aria-controls="${popupId}"]`);
+            if (popup) {
+                popup.classList.remove('visible');
+                 if (triggerButton) triggerButton.setAttribute('aria-expanded', 'false');
+            }
+        }
+
+        // --- Populate Stories Popup ---
+        function populateStoriesPopup(storiesData) {
+             if (!storiesContentDivEl) return;
+             storiesContentDivEl.innerHTML = '';
+             if (storiesData && Array.isArray(storiesData) && storiesData.length > 0) {
+                 storiesData.forEach(story => {
+                     const storyDiv = document.createElement('div');
+                     storyDiv.classList.add('mb-6');
+                     const title = document.createElement('h3');
+                     title.textContent = story.title || 'Câu chuyện';
+                     storyDiv.appendChild(title);
+                     const content = document.createElement('div');
+                     content.innerHTML = (story.content || 'Nội dung đang được cập nhật.')
+                                         .replace(/</g, "&lt;")
+                                         .replace(/>/g, "&gt;")
+                                         .replace(/\n/g, '<br>');
+                     storyDiv.appendChild(content);
+                     storiesContentDivEl.appendChild(storyDiv);
+                 });
+             } else {
+                 storiesContentDivEl.innerHTML = '<p>Hiện chưa có câu chuyện nào hoặc đã xảy ra lỗi khi tải.</p>';
+             }
+        }
+
+        // --- Initialize Markers and Side Menu ---
+        function initializeMapFeatures(sitesData) {
+            console.log("Initializing map features (markers, menu)...");
+            if (!locationListEl || !markersLayer) {
+                console.error("Location list or markers layer not ready.");
+                return;
+            }
+
+            locationListEl.innerHTML = '';
+            markersLayer.clearLayers();
+
+            const groupedSites = sitesData.reduce((acc, site) => {
+                 if (site && typeof site.lat === 'number' && typeof site.lng === 'number' && site.name && site.id) {
+                     const type = ['historical_site', 'museum', 'memorial'].includes(site.type) ? site.type : 'historical_site';
+                     if (!acc[type]) { acc[type] = []; }
+                     acc[type].push(site);
+                 } else {
+                     console.warn("Dữ liệu địa điểm không hợp lệ hoặc thiếu thông tin:", site);
+                 }
+                 return acc;
+            }, { historical_site: [], museum: [], memorial: [] });
+
+            const sectionOrder = [
+                { type: 'historical_site', title: 'Di tích lịch sử' },
+                { type: 'museum', title: 'Bảo tàng' },
+                { type: 'memorial', title: 'Công trình tưởng niệm' }
+            ];
+
+            let siteCount = 0;
+
+            sectionOrder.forEach(section => {
+                const sitesInSection = groupedSites[section.type] || [];
+                if (sitesInSection.length > 0) {
+                    const headingItem = document.createElement('li');
+                    headingItem.classList.add('menu-section-heading');
+                    headingItem.textContent = section.title;
+                    locationListEl.appendChild(headingItem);
+
+                    sitesInSection.sort((a, b) => a.name.localeCompare(b.name, 'vi'));
+
+                    sitesInSection.forEach(site => {
+                        siteCount++;
+                        let iconToUse;
+                        switch (site.type) {
+                            case 'museum': iconToUse = museumIcon; break;
+                            case 'memorial': iconToUse = memorialIcon; break;
+                            default: iconToUse = historicalSiteIcon; break;
+                        }
+
+                        const popupContent = generatePopupContent(site);
+                        const marker = L.marker([site.lat, site.lng], { icon: iconToUse, alt: site.name });
+
+                        marker.bindPopup(popupContent, {
+                            minWidth: 240, maxWidth: 280, maxHeight: 450, keepInView: true
+                        });
+
+                         const handlers = {};
+
+                         marker.on('popupopen', (e) => {
+                             const popupNode = e.popup.getElement();
+                             if (!popupNode) return;
+
+                             initializeSlideshow(popupNode.querySelector('.popup-slideshow-container'), site.imageUrls);
+
+                             const images = popupNode.querySelectorAll('.popup-image-fullscreenable');
+                             images.forEach(img => {
+                                 const index = parseInt(img.dataset.index, 10);
+                                 if (!isNaN(index) && site.imageUrls && site.imageUrls.length > 0) {
+                                     const handler = () => openFullscreenImage(site.imageUrls, index);
+                                     handlers[img.src] = handler;
+                                     img.addEventListener('click', handler);
+                                 } else {
+                                      console.warn("Could not get index or imageObjects for fullscreen click", img, site);
+                                 }
+                             });
+                         });
+
+                         marker.on('popupclose', (e) => {
+                             const popupNode = e.popup.getElement();
+                             if (!popupNode) return;
+                             const images = popupNode.querySelectorAll('.popup-image-fullscreenable');
+                             images.forEach(img => {
+                                 if (handlers[img.src]) {
+                                     img.removeEventListener('click', handlers[img.src]);
+                                     delete handlers[img.src];
+                                 }
+                             });
+                         });
+
+                        marker.addTo(markersLayer);
+                        site.marker = marker;
+
+                        const listItem = document.createElement('li');
+                        const link = document.createElement('a');
+                        link.href = "#";
+                        link.textContent = site.name;
+                        link.dataset.id = site.id;
+                        link.setAttribute('role', 'button');
+
+                        link.addEventListener('click', (e) => {
+                            e.preventDefault();
+                            if (map && site.marker) {
+                                map.flyTo([site.lat, site.lng], Math.max(map.getZoom(), FLY_TO_ZOOM), { duration: 1 });
+                                setTimeout(() => {
+                                    if (map && site.marker && map.hasLayer(site.marker) && map.getBounds().contains(marker.getLatLng())) {
+                                         site.marker.openPopup();
+                                    }
+                                }, POPUP_OPEN_DELAY);
+                            }
+                            sideMenuEl.classList.remove('open');
+                            menuButtonEl.setAttribute('aria-expanded', 'false');
+                        });
+                        listItem.appendChild(link);
+                        locationListEl.appendChild(listItem);
+                    });
+                }
+            });
+
+             if (siteCount === 0 && sitesData.length > 0) {
+                  locationListEl.innerHTML = '<li class="px-1 py-2 text-gray-500 text-sm">Không có địa điểm hợp lệ nào được tìm thấy trong dữ liệu.</li>';
+             } else if (siteCount === 0) {
+                  locationListEl.innerHTML = '<li class="px-1 py-2 text-gray-500 text-sm">Không có địa điểm nào để hiển thị.</li>';
+             }
+
+            console.log(`Initialized ${siteCount} sites.`);
+        }
+
+        // --- Search Functionality ---
+        function performSearch(searchTerm = null) {
+            const query = (searchTerm !== null ? searchTerm : searchInputEl.value).trim().toLowerCase();
+            searchSuggestionsEl.style.display = 'none';
+            searchInputEl.value = searchTerm || searchInputEl.value;
+
+            if (!query || historicalSites.length === 0) {
+                if (query) showCustomAlert('Vui lòng nhập tên địa điểm để tìm kiếm.');
+                return;
+            }
+
+            let foundSite = historicalSites.find(site => site.name.toLowerCase() === query);
+            if (!foundSite) {
+                 foundSite = historicalSites.find(site => site.name.toLowerCase().includes(query));
+            }
+
+            if (foundSite && foundSite.marker) {
+                map.flyTo([foundSite.lat, foundSite.lng], Math.max(map.getZoom(), FLY_TO_ZOOM), { duration: 1 });
+                setTimeout(() => {
+                     if (map && foundSite.marker && map.hasLayer(foundSite.marker) && map.getBounds().contains(foundSite.marker.getLatLng())) {
+                         foundSite.marker.openPopup();
+                     }
+                }, POPUP_OPEN_DELAY);
+                if(sideMenuEl.classList.contains('open')) {
+                     sideMenuEl.classList.remove('open');
+                     menuButtonEl.setAttribute('aria-expanded', 'false');
+                }
+            } else {
+                showCustomAlert(`Không tìm thấy địa điểm nào khớp với "${query}".`);
+            }
+        }
+
+        // --- Search Suggestions Logic ---
+        function updateSearchSuggestions() {
+            const query = searchInputEl.value.trim().toLowerCase();
+            searchSuggestionsEl.innerHTML = '';
+
+            if (query.length < 2 || historicalSites.length === 0) {
+                searchSuggestionsEl.style.display = 'none';
+                return;
+            }
+
+            const matchingSites = historicalSites
+                .filter(site => site.name.toLowerCase().includes(query))
+                .slice(0, 5);
+
+            if (matchingSites.length > 0) {
+                matchingSites.forEach(site => {
+                    const item = document.createElement('div');
+                    item.classList.add('suggestion-item');
+                    item.textContent = site.name;
+                    item.setAttribute('role', 'option');
+                    item.tabIndex = -1;
+
+                    item.addEventListener('click', () => {
+                        performSearch(site.name);
+                    });
+                    searchSuggestionsEl.appendChild(item);
+                });
+                searchSuggestionsEl.style.display = 'block';
+            } else {
+                searchSuggestionsEl.style.display = 'none';
+            }
+        }
+
+        // --- Custom Alert Function ---
+        function showCustomAlert(message) {
+            const existingAlert = document.getElementById('custom-alert');
+            if (existingAlert) existingAlert.remove();
+
+            const alertBox = document.createElement('div');
+            alertBox.id = 'custom-alert';
+            alertBox.setAttribute('role', 'alert');
+
+            const messageSpan = document.createElement('span');
+            messageSpan.textContent = message;
+
+            const closeButton = document.createElement('button');
+            closeButton.setAttribute('aria-label', 'Đóng thông báo');
+            closeButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" x2="6" y1="6" y2="18"/><line x1="6" x2="18" y1="6" y2="18"/></svg>';
+            closeButton.onclick = () => alertBox.remove();
+
+            alertBox.appendChild(messageSpan);
+            alertBox.appendChild(closeButton);
+            document.body.appendChild(alertBox);
+
+            setTimeout(() => {
+                const currentAlert = document.getElementById('custom-alert');
+                if (currentAlert === alertBox) {
+                    currentAlert.remove();
+                }
+            }, ALERT_TIMEOUT);
+        }
+
+        // --- Event Listeners Setup ---
+        function setupEventListeners() {
+            console.log("Setting up event listeners...");
+
+            // Menu Toggle
+            menuButtonEl.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const isOpen = sideMenuEl.classList.toggle('open');
+                menuButtonEl.setAttribute('aria-expanded', isOpen);
+            });
+            closeMenuButtonEl.addEventListener('click', () => {
+                sideMenuEl.classList.remove('open');
+                menuButtonEl.setAttribute('aria-expanded', 'false');
+            });
+
+            // Close menu/suggestions on outside click
+            document.addEventListener('click', (event) => {
+                if (sideMenuEl.classList.contains('open') && !sideMenuEl.contains(event.target) && !menuButtonEl.contains(event.target)) {
+                    sideMenuEl.classList.remove('open');
+                    menuButtonEl.setAttribute('aria-expanded', 'false');
+                }
+                const searchWrapper = document.getElementById('search-wrapper');
+                 if (!searchWrapper.contains(event.target)) {
+                     searchSuggestionsEl.style.display = 'none';
+                 }
+            });
+
+            // Logo click/keydown -> Reset view
+             logoContainerEl.addEventListener('click', () => {
+                  if (map) map.flyTo(INITIAL_CENTER, INITIAL_ZOOM, { duration: 1.5 });
+             });
+             logoContainerEl.addEventListener('keydown', (e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                       e.preventDefault();
+                       if (map) map.flyTo(INITIAL_CENTER, INITIAL_ZOOM, { duration: 1.5 });
+                  }
+             });
+
+
+            // Search
+            searchButtonEl.addEventListener('click', () => performSearch());
+            searchInputEl.addEventListener('keypress', (e) => { if (e.key === 'Enter') performSearch(); });
+            searchInputEl.addEventListener('input', updateSearchSuggestions);
+
+            // Bottom Control Buttons -> Open Popups
+            storiesButtonEl.addEventListener('click', () => openPopup('stories-popup'));
+            infoButtonEl.addEventListener('click', () => openPopup('info-popup'));
+
+            // Fullscreen Popups Close Logic
+            closeFullscreenImageButtonEl.addEventListener('click', closeFullscreenImage);
+            // Close image overlay only if clicking the background
+            fullscreenImageOverlayEl.addEventListener('click', function(e) {
+                if (e.target === fullscreenImageOverlayEl) {
+                    closeFullscreenImage();
+                }
+            });
+            storiesPopupEl.addEventListener('click', function(e) { if (e.target === storiesPopupEl) closePopup('stories-popup'); });
+            infoPopupEl.addEventListener('click', function(e) { if (e.target === infoPopupEl) closePopup('info-popup'); });
+
+            // Keyboard navigation / close
+            document.addEventListener('keydown', (e) => {
+                // Escape key closes popups/menu
+                if (e.key === 'Escape') {
+                    if (fullscreenImageOverlayEl.classList.contains('visible')) closeFullscreenImage();
+                    if (storiesPopupEl.classList.contains('visible')) closePopup('stories-popup');
+                    if (infoPopupEl.classList.contains('visible')) closePopup('info-popup');
+                    if (sideMenuEl.classList.contains('open')) {
+                         sideMenuEl.classList.remove('open');
+                         menuButtonEl.setAttribute('aria-expanded', 'false');
+                    }
+                }
+                // Left/Right arrows for fullscreen slideshow
+                else if (fullscreenImageOverlayEl.classList.contains('visible')) {
+                    if (e.key === 'ArrowLeft') {
+                        showFullscreenPrev();
+                    } else if (e.key === 'ArrowRight') {
+                        showFullscreenNext();
+                    }
+                }
+            });
+
+
+            // Window Resize -> Invalidate Map Size (Debounced)
+            window.addEventListener('resize', () => {
+                clearTimeout(resizeTimeoutId);
+                resizeTimeoutId = setTimeout(() => {
+                    if (map) map.invalidateSize();
+                    console.log("Map size invalidated on resize.");
+                }, RESIZE_DEBOUNCE_DELAY);
+            });
+
+            console.log("Event listeners set up.");
+        }
+
+        // --- Main Initialization Function ---
+        async function initializeApp() {
+            console.log("Initializing application...");
+            initializeMap();
+
+            const [sitesData, boundaryData, storiesData] = await Promise.all([
+                fetchData(SITES_URL),
+                fetchData(GEOJSON_URL),
+                fetchData(STORIES_URL)
+            ]);
+
+            if (sitesData) {
+                // Validate and potentially transform imageUrls here if needed
+                sitesData.forEach(site => {
+                    if (site.imageUrls && !Array.isArray(site.imageUrls)) {
+                        console.warn(`Site ${site.id} has invalid imageUrls format. Expected array.`);
+                        site.imageUrls = [];
+                    } else if (site.imageUrls) {
+                        site.imageUrls = site.imageUrls.filter(img => typeof img === 'object' && img !== null && typeof img.url === 'string');
+                    }
+                });
+                historicalSites = sitesData;
+                initializeMapFeatures(historicalSites);
+            } else {
+                console.error("Failed to load critical site data. Map features may be incomplete.");
+                initializeMapFeatures([]);
+                showCustomAlert("Lỗi nghiêm trọng: Không thể tải dữ liệu các địa điểm.");
+            }
+
+            if (boundaryData) {
+                try {
+                    boundaryLayer = L.geoJSON(boundaryData, {
+                        style: { color: "#D80027", weight: 2.5, opacity: 0.7, fill: true, fillColor:"#D80027",fillOpacity:0.08},
+                        interactive: false
+                    }).addTo(map);
+                    console.log("Boundary GeoJSON loaded.");
+                    if (legendBoundaryTextEl) legendBoundaryTextEl.textContent = 'Ranh giới TP.HCM';
+                } catch (error) {
+                    console.error("Error processing GeoJSON data:", error);
+                     if (legendBoundaryTextEl) legendBoundaryTextEl.textContent = 'Ranh giới (Lỗi)';
+                }
+            } else {
+                console.warn("Boundary data not loaded.");
+                 if (legendBoundaryTextEl) legendBoundaryTextEl.textContent = 'Ranh giới (Lỗi tải)';
+            }
+
+            populateStoriesPopup(storiesData);
+            if (storiesData) console.log("Stories data loaded.");
+            else console.warn("Stories data not loaded.");
+
+            setupEventListeners();
+            setTimeout(() => { if (map) map.invalidateSize(); }, 100);
+            console.log("Application initialization complete.");
+        }
+
+        // --- Start the Application ---
+        document.addEventListener('DOMContentLoaded', initializeApp);
+
+    </script>
+</body>
+</html>
